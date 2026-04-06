@@ -36,8 +36,10 @@
     <div class="nav-links">
       <button class="nav-btn active" data-view="archive" onclick="showView('archive')">Archive</button>
       <button class="nav-btn" data-view="book" onclick="showView('book')">Reading Room</button>
+      <button class="nav-btn" data-view="timelines" onclick="showView('timelines')">Timelines</button>
       <button class="nav-btn" data-view="map" onclick="showView('map')">Knowledge Map</button>
       <button class="nav-btn" data-view="scenarios" onclick="showView('scenarios')">Simulations</button>
+      <button class="nav-btn" data-view="lab" onclick="showView('lab')">Archive Lab</button>
     </div>
     <div class="nav-search">
       <input type="text" id="search-input" placeholder="Search articles..." oninput="filterArticles()">
@@ -69,6 +71,19 @@
         <section class="book-reader" id="book-reader"></section>
       </div>
     </div>
+    <div class="view" id="view-timelines">
+      <div class="timeline-shell">
+        <aside class="timeline-sidebar">
+          <div class="timeline-sidebar-head">
+            <div class="timeline-label">Timeline Desk</div>
+            <h2 class="timeline-sidebar-title">Clustered Chronologies</h2>
+            <p class="timeline-sidebar-note">Each lane groups archive articles by topic cluster and turns them into a chronological briefing line.</p>
+          </div>
+          <div class="timeline-clusters" id="timeline-clusters"></div>
+        </aside>
+        <section class="timeline-stage" id="timeline-stage"></section>
+      </div>
+    </div>
     <div class="view" id="view-map">
       <div class="map-nav">
         <button class="vfn-link" onclick="showView('archive')">← Back to Archive</button>
@@ -87,6 +102,23 @@
         <p>Enter a scenario. Read the briefing on the right. Make your analysis on the left. See what actually happened.</p>
       </div>
       <div class="scenario-grid" id="scenario-grid"></div>
+    </div>
+    <div class="view" id="view-lab">
+      <div class="lab-shell">
+        <div class="lab-header">
+          <div>
+            <div class="lab-label">Archive Lab</div>
+            <h2 class="lab-title">Crossword and Quiz</h2>
+            <p class="lab-sub">Test recall, actors, conflicts, and archive vocabulary without leaving the reporting universe.</p>
+          </div>
+          <div class="lab-switches">
+            <button class="lab-switch active" data-lab-mode="crossword" onclick="setLabMode('crossword')">Crossword</button>
+            <button class="lab-switch" data-lab-mode="quiz" onclick="setLabMode('quiz')">Quiz</button>
+          </div>
+        </div>
+        <div class="lab-panel active" id="lab-crossword"></div>
+        <div class="lab-panel" id="lab-quiz"></div>
+      </div>
     </div>
   </div>
 </div>
