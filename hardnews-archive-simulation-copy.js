@@ -38,8 +38,9 @@ const TOPIC_SCENARIO_MAP={
   "Miscellaneous":[],
 };
 
-let currentFilter='all',currentSearch='',currentScenario=null,currentPhaseIdx=0,simScore=0,mapInitialised=false,currentBriefingId=null,mapState=null,currentBookArticleId=ARTICLES[0]?.id||null,knownAuthorsCache=null,currentTimelineTopic='',currentLabMode='crossword',crosswordState=Object.create(null),crosswordChecked=false,crosswordRevealAll=false,crosswordStatus=CROSSWORD_DEFAULT_STATUS,quizQuestions=[],currentQuizIdx=0,quizScore=0,quizSelection=null;
+let currentFilter='all',currentSearch='',currentScenario=null,currentPhaseIdx=0,simScore=0,mapInitialised=false,currentBriefingId=null,mapState=null,currentBookArticleId=ARTICLES[0]?.id||null,knownAuthorsCache=null,currentTimelineTopic='',currentLabMode='crossword',crosswordState=Object.create(null),crosswordChecked=false,crosswordRevealAll=false,crosswordStatus=CROSSWORD_DEFAULT_STATUS,quizQuestions=[],currentQuizIdx=0,quizScore=0,quizSelection=null,articleEventCache=new Map(),semanticGraphCache=null,simChoiceHistory=[],currentPhaseDossier=null;
 const GEO_BYLINE_PREFIXES=new Set(['Afghanistan','Arabia','China','Delhi','Gulf','India','Iran','Iraq','Israel','Kabul','Pakistan','Palestine','Qatar','Russia','Saudi','Syria','Turkey','US','Yemen']);
+const EVENT_KEYWORDS=['attack','airstrike','ceasefire','deal','escape','fled','intervention','massacre','missile','occupation','offensive','peace','protest','recapture','refugee','sanction','siege','strike','summit','talks','war'];
 
 function enterApp(){
   const es=document.getElementById('entry-screen');
@@ -48,7 +49,6 @@ function enterApp(){
     es.style.display='none';
     document.getElementById('app').classList.add('visible');
     buildTopicFilters();renderArchive();renderBookView();renderTimelineView();renderScenarios();renderLabView();
-    showView('book');
   },800);
 }
 
@@ -231,7 +231,7 @@ function renderTimelineView(){
     return `<button class="timeline-cluster-btn ${cluster.topic===activeCluster.topic?'active':''}" style="--topic-color:${color}" onclick="openTimelineCluster('${escAttr(cluster.topic)}')">
       <div class="timeline-cluster-top">
         <div class="timeline-cluster-name">${escH(cluster.topic)}</div>
-        <div class="timeline-cluster-count">${cluster.items.length} files</div>
+        <div class="timeline-cluster-count">${cluster.items.length} signals</div>
       </div>
       <div class="timeline-cluster-range">${escH(cluster.rangeLabel)}</div>
     </button>`;
@@ -252,8 +252,8 @@ function renderTimelineView(){
         <div class="timeline-stat-value">${escH(activeCluster.rangeLabel)}</div>
       </div>
       <div class="timeline-stat">
-        <div class="timeline-stat-label">Articles</div>
-        <div class="timeline-stat-value">${activeCluster.items.length} sourced events</div>
+        <div class="timeline-stat-label">Signals</div>
+        <div class="timeline-stat-value">${activeCluster.items.length} event extractions from ${activeCluster.articleCount} articles</div>
       </div>
       <div class="timeline-stat">
         <div class="timeline-stat-label">Signals</div>
@@ -271,6 +271,7 @@ function renderTimelineView(){
           <div class="timeline-event-meta">
             <span class="timeline-chip">${escH(item.author)}</span>
             <span class="timeline-chip">${escH(item.fileLabel)}</span>
+            <span class="timeline-chip">${escH(item.eventLabel)}</span>
             ${item.actors.slice(0,2).map(actor=>`<span class="timeline-chip">${escH(actor)}</span>`).join('')}
           </div>
           <div class="timeline-event-body">${escH(item.signal)}</div>
@@ -508,7 +509,7 @@ function renderScenarios(){
 
 function openSim(id){
   currentScenario=SCENARIOS.find(s=>s.id===id);if(!currentScenario)return;
-  currentPhaseIdx=0;simScore=0;
+  currentPhaseIdx=0;simScore=0;simChoiceHistory=[];currentPhaseDossier=null;
   const sc=currentScenario;
   const modal=document.getElementById('sim-modal');
   modal.style.setProperty('--sc-color',sc.color);
@@ -563,15 +564,11 @@ function renderPhase(){
     </button>`
   ).join('');
   document.getElementById('consequence-panel').classList.remove('visible');
-  currentBriefingId=phase.briefing_id||null;
-  const briefingArticle=currentBriefingId?ARTICLES.find(a=>a.id===currentBriefingId):null;
-  const briefingTitle=phase.briefing_title||briefingArticle?.title||'Intel Briefing';
-  const briefingText=(phase.briefing_text&&phase.briefing_text!=='Briefing text not available.'?phase.briefing_text:'')||briefingArticle?.text||briefingArticle?.summary||'';
-  document.getElementById('briefing-title').textContent=briefingTitle;
-  const bt=(briefingText||'').split(/\n+/).filter(p=>p.trim().length>20);
-  document.getElementById('briefing-text').innerHTML=bt.length>0
-    ?bt.map(p=>`<p>${escH(p.trim())}</p>`).join('')
-    :`<p style="color:var(--muted);font-style:italic">Briefing document excerpt not available.</p>`;
+  const dossier=buildScenarioDossier(sc,phase,currentPhaseIdx);
+  currentPhaseDossier=dossier;
+  currentBriefingId=dossier.primaryArticle?.id||phase.briefing_id||null;
+  document.getElementById('briefing-title').textContent=dossier.title;
+  document.getElementById('briefing-text').innerHTML=renderScenarioBriefingHtml(dossier);
   const obb=document.getElementById('briefing-open-btn');
   obb.style.display=currentBriefingId?'inline-block':'none';
 }
@@ -579,6 +576,19 @@ function renderPhase(){
 function makeChoice(idx){
   const sc=currentScenario;const phase=sc.phases[currentPhaseIdx];const choice=phase.choices[idx];
   simScore+=choice.score||0;
+  const dossier=currentPhaseDossier||buildScenarioDossier(sc,phase,currentPhaseIdx);
+  simChoiceHistory.push({
+    phaseIndex:currentPhaseIdx,
+    phaseTitle:phase.title,
+    phaseQuestion:phase.question,
+    choiceLabel:choice.label,
+    outcomeTitle:choice.outcome_title,
+    outcome:choice.outcome,
+    scoreDelta:choice.score||0,
+    sourceId:dossier.primaryArticle?.id||null,
+    sourceTitle:dossier.primaryArticle?.title||dossier.title,
+    dossier
+  });
   document.getElementById('sim-topbar-score').textContent=`Score: ${simScore>=0?'+':''}${simScore}`;
   document.querySelectorAll('.choice-btn').forEach((b,i)=>{
     b.classList.remove('chosen','unchosen');
@@ -591,7 +601,7 @@ function makeChoice(idx){
   const cp=document.getElementById('consequence-panel');
   document.getElementById('consequence-header').style.cssText=`background:${sc2}18;color:${sc2}`;
   document.getElementById('consequence-header').textContent=choice.outcome_title;
-  document.getElementById('consequence-body').textContent=choice.outcome;
+  document.getElementById('consequence-body').innerHTML=renderChoiceConsequenceHtml(choice,dossier);
   const nb=document.getElementById('consequence-next');
   nb.style.cssText=`color:${sc.color};border-color:${sc.color}`;
   nb.textContent=isLast?'See Historical Outcome →':'Next Phase →';
@@ -616,12 +626,13 @@ function showOutcome(){
   const maxPossible=sc.phases.reduce((s,p)=>s+Math.max(...p.choices.map(c=>c.score||0)),0);
   const minPossible=sc.phases.reduce((s,p)=>s+Math.min(...p.choices.map(c=>c.score||0)),0);
   const grade=simScore>=maxPossible*.7?'Sharp Analysis':simScore>=0?'Measured Assessment':'Contested Readings';
+  const outcomeDossier=buildSimulationOutcomeDossier(sc,simChoiceHistory,simScore,grade);
   const sdEl=document.getElementById('outcome-score-display');
   sdEl.textContent=(simScore>=0?'+':'')+simScore;
   sdEl.style.color=simScore>=1?'var(--success)':simScore<=-1?'var(--danger)':'var(--accent)';
   document.getElementById('outcome-score-label').textContent=grade;
-  document.getElementById('outcome-title').textContent=sc.outcome_title;
-  document.getElementById('outcome-text').textContent=sc.outcome_text;
+  document.getElementById('outcome-title').textContent=outcomeDossier.title;
+  document.getElementById('outcome-text').innerHTML=renderSimulationOutcomeHtml(outcomeDossier);
   buildPips(sc.phases.length,sc.phases.length);
 }
 
@@ -663,7 +674,8 @@ function initMap(){
   };
   const initial=getDims();
   let W=initial.W,H=initial.H;
-  const graphDegrees=getGraphDegrees();
+  const semanticGraph=getSemanticGraph();
+  const graphDegrees=getGraphDegrees(semanticGraph);
   const svg=d3.select('#map-svg');
   if(mapState&&mapState.sim) mapState.sim.stop();
   svg.selectAll('*').remove();
@@ -671,9 +683,24 @@ function initMap(){
   const legend=document.getElementById('map-legend');
   legend.innerHTML='<h4>Topics</h4>'+Object.entries(TOPIC_COLORS).map(([t,c])=>
     `<div class="legend-item"><div class="legend-dot" style="background:${c}"></div><span>${t}</span></div>`
-  ).join('');
-  const nodes=ARTICLES.map(a=>({id:a.id,title:a.title,author:a.author,topic:a.topic,connections:graphDegrees.get(a.id)||0,color:TOPIC_COLORS[a.topic]||'#6b7280'}));
-  const links=EDGES.map(e=>({source:e.source,target:e.target,weight:e.weight}));
+  ).join('')+'<div class="legend-item" style="margin-top:.7rem"><span>Edges now reflect shared actors, stressors, chronology, and cluster continuity.</span></div>';
+  const hint=document.querySelector('.map-instructions');
+  if(hint) hint.textContent='Semantic links · Click to focus neighbors · Hover edges for reasons · Double-click nodes to read';
+  const nodes=ARTICLES.map(a=>{
+    const matter=getArticleMatter(a);
+    const events=getArticleEvents(a);
+    return {
+      id:a.id,
+      title:a.title,
+      author:matter.author,
+      topic:a.topic,
+      connections:graphDegrees.get(a.id)||0,
+      color:TOPIC_COLORS[a.topic]||'#6b7280',
+      dateLabel:formatArchiveDate(parseArticlePublishedDate(a),'month'),
+      signal:events[0]?.summary||matter.strap
+    };
+  });
+  const links=semanticGraph.edges.map(e=>({...e}));
   const adjacency=new Map(nodes.map(n=>[n.id,new Set()]));
   links.forEach(l=>{
     adjacency.get(l.source).add(l.target);
@@ -681,10 +708,10 @@ function initMap(){
   });
   let selectedNodeId=null;
   const sim=d3.forceSimulation(nodes)
-    .force('link',d3.forceLink(links).id(d=>d.id).distance(50).strength(.3))
-    .force('charge',d3.forceManyBody().strength(-120))
+    .force('link',d3.forceLink(links).id(d=>d.id).distance(90).strength(.25))
+    .force('charge',d3.forceManyBody().strength(-220))
     .force('center',d3.forceCenter(W/2,H/2))
-    .force('collision',d3.forceCollide(d=>Math.max(Math.sqrt(d.connections)*3+8,8)));
+    .force('collision',d3.forceCollide(d=>Math.max(Math.log1p(d.connections)*5+10,12)));
   const g=svg.append('g');
   svg.call(d3.zoom().scaleExtent([.2,5]).on('zoom',e=>g.attr('transform',e.transform)));
   svg.on('click.focusReset',e=>{
@@ -696,7 +723,7 @@ function initMap(){
   const link=g.append('g').selectAll('line').data(links).enter().append('line')
     .attr('stroke','#2a2d3a')
     .attr('stroke-opacity',.5)
-    .attr('stroke-width',d=>Math.min(d.weight*.4,2))
+    .attr('stroke-width',d=>Math.min(d.weight*.28,2.6))
     .style('cursor','pointer')
     .style('pointer-events','stroke')
     .on('click',(e,d)=>{
@@ -710,6 +737,11 @@ function initMap(){
       }
       selectedNodeId=s;
       applyFocusState(selectedNodeId);
+    })
+    .on('mouseover',(e,d)=>{
+      const tt=document.getElementById('map-tooltip');
+      tt.style.display='block';tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';
+      tt.innerHTML=`<strong style="font-size:.78rem">${escH(linkSemanticLabel(d))}</strong><br><span style="color:#7b8099;font-size:.7rem">${escH(d.types.slice(0,3).join(' · '))}</span><br><span style="font-size:.68rem;color:#a8b0c5">${escH(shortenText(d.reasons.join(' • '),180))}</span>`;
     });
   const nodeG=g.append('g').selectAll('g').data(nodes).enter().append('g').style('cursor','pointer')
     .call(d3.drag()
@@ -728,12 +760,12 @@ function initMap(){
     .on('mouseover',(e,d)=>{
       const tt=document.getElementById('map-tooltip');
       tt.style.display='block';tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';
-      tt.innerHTML=`<strong style="font-size:.8rem">${escH(d.title)}</strong><br><span style="color:#7b8099;font-size:.7rem">${d.author}</span><br><span style="color:${d.color};font-size:.65rem">${d.topic}</span>`;
+      tt.innerHTML=`<strong style="font-size:.8rem">${escH(d.title)}</strong><br><span style="color:#7b8099;font-size:.7rem">${escH(d.author)} · ${escH(d.dateLabel)}</span><br><span style="color:${d.color};font-size:.65rem">${escH(d.topic)}</span><br><span style="font-size:.68rem;color:#a8b0c5">${escH(shortenText(d.signal,170))}</span>`;
     })
     .on('mousemove',e=>{const tt=document.getElementById('map-tooltip');tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';})
     .on('mouseout',()=>{document.getElementById('map-tooltip').style.display='none';});
-  nodeG.append('circle').attr('r',d=>Math.max(Math.sqrt(d.connections)*2.5+5,5)).attr('fill',d=>d.color+'cc').attr('stroke',d=>d.color).attr('stroke-width',d=>d.author==='Sanjay Kapoor'?2:.5);
-  nodeG.filter(d=>d.connections>=8).append('text').attr('text-anchor','middle').attr('dy',d=>-(Math.max(Math.sqrt(d.connections)*2.5+7,12))).attr('fill','#e2e5f0').attr('font-size','7px').text(d=>d.title.substring(0,18));
+  nodeG.append('circle').attr('r',d=>Math.max(Math.log1p(d.connections)*4+5,5)).attr('fill',d=>d.color+'cc').attr('stroke',d=>d.color).attr('stroke-width',d=>d.author==='Sanjay Kapoor'?2:.5);
+  nodeG.filter(d=>d.connections>=8).append('text').attr('text-anchor','middle').attr('dy',d=>-(Math.max(Math.log1p(d.connections)*4+7,12))).attr('fill','#333').attr('font-size','7px').text(d=>d.title.substring(0,18));
 
   function linkNodeId(endpoint){
     return typeof endpoint==='string'?endpoint:endpoint.id;
@@ -750,7 +782,7 @@ function initMap(){
       link
         .attr('stroke','#2a2d3a')
         .attr('stroke-opacity',.5)
-        .attr('stroke-width',d=>Math.min(d.weight*.4,2));
+        .attr('stroke-width',d=>Math.min(d.weight*.28,2.6));
       return;
     }
 
@@ -776,7 +808,7 @@ function initMap(){
       .attr('stroke-width',d=>{
         const s=linkNodeId(d.source);
         const t=linkNodeId(d.target);
-        return s===nodeId||t===nodeId?Math.max(1.2,Math.min(d.weight*.6,3.4)):Math.min(d.weight*.3,1.2);
+        return s===nodeId||t===nodeId?Math.max(1.2,Math.min(d.weight*.45,3.6)):Math.min(d.weight*.18,1.2);
       });
   }
 
@@ -841,6 +873,7 @@ function stripArchiveHeader(text){
   let cleaned=normaliseArticleText(text).replace(/^Foreign Policy\s+/i,'').trim();
   cleaned=cleaned.replace(/^[\s\S]*?Published:\s*[\s\S]*?\d{1,2}:\d{2}\s*/i,'').trim();
   cleaned=cleaned.replace(/^Updated:\s*[\s\S]*?\d{1,2}:\d{2}\s*/i,'').trim();
+  cleaned=cleaned.replace(/^.*?Submitted by\s*Hardnews\s*on [A-Za-z]{3},\s*\d{2}\/\d{2}\/\d{4}\s*-\s*\d{1,2}:\d{2}\s*/i,'').trim();
   return cleaned;
 }
 function extractEmbeddedByline(article,text){
@@ -924,7 +957,8 @@ function getArticleMatter(article){
 function getArticleById(id){return ARTICLES.find(article=>article.id===id)||null;}
 function parseArticlePublishedDate(article){
   const source=article.text||article.summary||'';
-  const match=source.match(/Published:\s*[A-Za-z]{3},\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+  const match=source.match(/Published:\s*[A-Za-z]{3},\s*(\d{2})\/(\d{2})\/(\d{4})/i)
+    ||source.match(/Submitted by .*? on [A-Za-z]{3},\s*(\d{2})\/(\d{2})\/(\d{4})/i);
   if(!match) return null;
   const [,month,day,year]=match;
   const date=new Date(Number(year),Number(month)-1,Number(day));
@@ -948,37 +982,340 @@ function collectSignals(items,key,count){
 function groupTimelineClusters(articles){
   const grouped=new Map();
   articles.forEach(article=>{
-    const matter=getArticleMatter(article);
-    const date=parseArticlePublishedDate(article);
-    const signalParagraph=matter.paragraphs.find(paragraph=>paragraph!==matter.strap)||matter.paragraphs[0]||matter.strap;
-    const item={
-      id:article.id,
-      topic:article.topic,
-      title:article.title,
-      author:matter.displayAuthor,
-      strap:matter.strap,
-      signal:shortenText(signalParagraph,280),
-      actors:article.actors||[],
-      stressors:article.stressors||[],
-      date,
-      dateLabel:date?formatArchiveDate(date):'Undated',
-      fileLabel:article.filename||'Archive file'
-    };
     if(!grouped.has(article.topic)) grouped.set(article.topic,[]);
-    grouped.get(article.topic).push(item);
+    getArticleEvents(article).slice(0,2).forEach((event,idx)=>{
+      grouped.get(article.topic).push({
+        id:article.id,
+        topic:article.topic,
+        title:article.title,
+        author:event.author,
+        strap:event.strap,
+        signal:event.summary,
+        actors:event.actors,
+        stressors:event.stressors,
+        date:event.date,
+        dateLabel:event.dateLabel,
+        fileLabel:article.filename||'Archive file',
+        eventLabel:idx===0?'Lead signal':'Follow-on signal'
+      });
+    });
   });
   return [...grouped.entries()].map(([topic,items])=>{
     items.sort((a,b)=>(a.date?.getTime()||0)-(b.date?.getTime()||0));
     const dates=items.map(item=>item.date).filter(Boolean);
+    const articleCount=new Set(items.map(item=>item.id)).size;
     const rangeLabel=dates.length?`${formatArchiveDate(dates[0],'month')} to ${formatArchiveDate(dates[dates.length-1],'month')}`:'Undated cluster';
     return {
       topic,
       items,
+      articleCount,
       rangeLabel,
       summary:`${items.length} sourced moments across ${collectSignals(items,'actors',3).join(', ')||'the archive actors'} with pressure points around ${collectSignals(items,'stressors',2).join(' and ')||'regional escalation'}.`,
       signalLabel:collectSignals(items,'stressors',3).join(', ')||'No stressors tagged'
     };
   }).sort((a,b)=>b.items.length-a.items.length||a.topic.localeCompare(b.topic));
+}
+function splitIntoSentences(text){
+  return normaliseArticleText(text)
+    .split(/(?<=[.!?])\s+/)
+    .map(sentence=>sentence.trim())
+    .filter(sentence=>sentence.length>35);
+}
+function scoreEventSentence(sentence,article,matter){
+  const lower=sentence.toLowerCase();
+  const keywordHits=EVENT_KEYWORDS.filter(keyword=>lower.includes(keyword)).length;
+  const actorHits=(article.actors||[]).filter(actor=>actor&&lower.includes(actor.toLowerCase())).length;
+  const stressorHits=(article.stressors||[]).filter(stressor=>stressor&&lower.includes(stressor.toLowerCase())).length;
+  const dateHits=(sentence.match(/\b(19|20)\d{2}\b/g)||[]).length;
+  const numberHits=(sentence.match(/\b\d+\b/g)||[]).length;
+  const topicHit=lower.includes(article.topic.toLowerCase())?1:0;
+  const titleHit=lower.includes(matter.title.toLowerCase())?1:0;
+  return keywordHits*4+actorHits*3+stressorHits*3+dateHits*2+Math.min(numberHits,2)+topicHit+titleHit-(sentence.length>230?2:0);
+}
+function getArticleEvents(article){
+  if(articleEventCache.has(article.id)) return articleEventCache.get(article.id);
+  const matter=getArticleMatter(article);
+  const date=parseArticlePublishedDate(article);
+  const sourceSentences=uniqueItems([matter.strap,...matter.paragraphs.flatMap(splitIntoSentences)])
+    .filter(sentence=>sentence.length>35)
+    .map(sentence=>({sentence,score:scoreEventSentence(sentence,article,matter)}))
+    .sort((a,b)=>b.score-a.score||a.sentence.length-b.sentence.length)
+    .slice(0,3)
+    .map((entry,idx)=>({
+      id:`${article.id}-event-${idx+1}`,
+      articleId:article.id,
+      title:article.title,
+      author:matter.displayAuthor,
+      strap:matter.strap,
+      summary:shortenText(entry.sentence,280),
+      date,
+      dateLabel:date?formatArchiveDate(date):'Undated',
+      actors:(article.actors||[]).filter(actor=>entry.sentence.toLowerCase().includes(actor.toLowerCase())).slice(0,3),
+      stressors:(article.stressors||[]).filter(stressor=>entry.sentence.toLowerCase().includes(stressor.toLowerCase())).slice(0,3)
+    }));
+  const fallback=[{
+    id:`${article.id}-event-1`,
+    articleId:article.id,
+    title:article.title,
+    author:matter.displayAuthor,
+    strap:matter.strap,
+    summary:shortenText(matter.strap||matter.paragraphs[0]||article.summary||article.title,280),
+    date,
+    dateLabel:date?formatArchiveDate(date):'Undated',
+    actors:(article.actors||[]).slice(0,3),
+    stressors:(article.stressors||[]).slice(0,3)
+  }];
+  const events=sourceSentences.length?sourceSentences:fallback;
+  articleEventCache.set(article.id,events);
+  return events;
+}
+function buildSemanticGraph(){
+  if(semanticGraphCache) return semanticGraphCache;
+  const candidateEdges=[];
+  const rawAdjacency=new Map(ARTICLES.map(article=>[article.id,[]]));
+  for(let i=0;i<ARTICLES.length;i++){
+    for(let j=i+1;j<ARTICLES.length;j++){
+      const left=ARTICLES[i],right=ARTICLES[j];
+      const reasons=[];
+      const types=[];
+      let weight=0;
+      if(left.topic===right.topic){
+        weight+=5;types.push('shared topic');reasons.push(`Both articles sit in the ${left.topic} cluster.`);
+      }
+      const sharedActors=intersect(left.actors||[],right.actors||[]);
+      if(sharedActors.length){
+        weight+=Math.min(sharedActors.length*2,6);
+        types.push('shared actors');
+        reasons.push(`Shared actors: ${sharedActors.slice(0,3).join(', ')}.`);
+      }
+      const sharedStressors=intersect(left.stressors||[],right.stressors||[]);
+      if(sharedStressors.length){
+        weight+=Math.min(sharedStressors.length*2,4);
+        types.push('shared stressors');
+        reasons.push(`Shared pressures: ${sharedStressors.slice(0,3).join(', ')}.`);
+      }
+      const years=Math.abs((parseArticlePublishedDate(left)?.getFullYear()||0)-(parseArticlePublishedDate(right)?.getFullYear()||0));
+      if(years<=2&&parseArticlePublishedDate(left)&&parseArticlePublishedDate(right)){
+        weight+=2;
+        types.push('temporal proximity');
+        reasons.push(`Published within ${years||0} year${years===1?'':'s'} of each other.`);
+      }
+      const leftSc=TOPIC_SCENARIO_MAP[left.topic]||[];
+      const rightSc=TOPIC_SCENARIO_MAP[right.topic]||[];
+      const sharedScenarios=intersect(leftSc,rightSc);
+      if(sharedScenarios.length){
+        weight+=sharedScenarios.length;
+        types.push('scenario continuity');
+        reasons.push(`Both inform ${sharedScenarios.length===1?'the same simulation':'the same simulations'}.`);
+      }
+      if(weight<4) continue;
+      const edge={id:`${left.id}__${right.id}`,source:left.id,target:right.id,weight,types:uniqueItems(types),reasons:uniqueItems(reasons)};
+      candidateEdges.push(edge);
+      rawAdjacency.get(left.id).push(edge);
+      rawAdjacency.get(right.id).push(edge);
+    }
+  }
+  const selectedIds=new Set();
+  rawAdjacency.forEach(list=>{
+    list
+      .slice()
+      .sort((a,b)=>b.weight-a.weight||a.source.localeCompare(b.source)||a.target.localeCompare(b.target))
+      .slice(0,6)
+      .forEach(edge=>selectedIds.add(edge.id));
+  });
+  const edges=candidateEdges.filter(edge=>selectedIds.has(edge.id));
+  const adjacency=new Map(ARTICLES.map(article=>[article.id,[]]));
+  edges.forEach(edge=>{
+    adjacency.get(edge.source).push(edge);
+    adjacency.get(edge.target).push(edge);
+  });
+  semanticGraphCache={edges,adjacency};
+  return semanticGraphCache;
+}
+function buildScenarioDossier(scenario,phase){
+  const phaseIndex=arguments.length>2?arguments[2]:currentPhaseIdx;
+  const primaryArticle=getArticleById(phase.briefing_id)||chooseScenarioArticle(scenario,phase);
+  const matter=primaryArticle?getArticleMatter(primaryArticle):null;
+  const events=primaryArticle?getArticleEvents(primaryArticle).slice(0,2):[];
+  const graph=buildSemanticGraph();
+  const connected=(primaryArticle?graph.adjacency.get(primaryArticle.id):[]||[])
+    .slice()
+    .sort((a,b)=>b.weight-a.weight)
+    .slice(0,3)
+    .map(edge=>{
+      const relatedId=edge.source===primaryArticle.id?edge.target:edge.source;
+      const relatedArticle=getArticleById(relatedId);
+      return {article:relatedArticle,label:linkSemanticLabel(edge),reasons:edge.reasons};
+    })
+    .filter(item=>item.article);
+  const cluster=primaryArticle?groupTimelineClusters(ARTICLES).find(item=>item.topic===primaryArticle.topic):null;
+  const timelineSignals=(cluster?.items||[])
+    .filter(item=>item.id!==primaryArticle?.id)
+    .slice(0,3);
+  const excerptParagraphs=matter?matter.paragraphs.slice(0,2):[];
+  const dependencies=buildPhaseDependencies(scenario,phaseIndex,primaryArticle,graph);
+  const narrative=buildPhaseNarrative(phase,matter,events,dependencies);
+  return {
+    title:phase.briefing_title||primaryArticle?.title||'Intel Briefing',
+    primaryArticle,
+    matter,
+    events,
+    connected,
+    timelineSignals,
+    excerptParagraphs,
+    dependencies,
+    narrative,
+    rationale:primaryArticle?`Primary source selected from the archive, then reinforced with semantic neighbors and timeline signals from the ${primaryArticle.topic} cluster.`:'No primary archive source resolved for this phase.'
+  };
+}
+function buildPhaseDependencies(scenario,phaseIndex,primaryArticle,graph){
+  if(!primaryArticle||phaseIndex<=0) return [];
+  return scenario.phases
+    .slice(0,phaseIndex)
+    .map((phase,idx)=>{
+      const source=getArticleById(phase.briefing_id)||chooseScenarioArticle(scenario,phase);
+      if(!source) return null;
+      const edge=(graph.adjacency.get(primaryArticle.id)||[]).find(item=>{
+        const relatedId=item.source===primaryArticle.id?item.target:item.source;
+        return relatedId===source.id;
+      });
+      return {
+        phaseNum:idx+1,
+        source,
+        edge,
+        dependencyText:edge
+          ?`${source.title} links forward through ${edge.types.slice(0,2).join(' and ')}.`
+          :`${source.title} establishes the earlier phase context for this decision.`
+      };
+    })
+    .filter(Boolean)
+    .slice(-3);
+}
+function buildPhaseNarrative(phase,matter,events,dependencies){
+  const parts=[phase.context];
+  if(matter?.strap) parts.push(matter.strap);
+  if(events[0]?.summary) parts.push(events[0].summary);
+  if(dependencies[0]?.dependencyText) parts.push(dependencies[dependencies.length-1].dependencyText);
+  return shortenText(parts.filter(Boolean).join(' '),420);
+}
+function chooseScenarioArticle(scenario,phase){
+  const scenarioTopics=Object.entries(TOPIC_SCENARIO_MAP)
+    .filter(([,ids])=>ids.includes(scenario.id))
+    .map(([topic])=>topic);
+  const pool=ARTICLES
+    .filter(article=>scenarioTopics.includes(article.topic))
+    .map(article=>({article,score:scoreScenarioArticle(article,phase,scenarioTopics)}))
+    .sort((a,b)=>b.score-a.score);
+  return pool[0]?.article||null;
+}
+function scoreScenarioArticle(article,phase,scenarioTopics){
+  const matter=getArticleMatter(article);
+  const blob=[phase.title,phase.context,phase.question].join(' ').toLowerCase();
+  const actorHits=(article.actors||[]).filter(actor=>blob.includes(actor.toLowerCase())).length;
+  const stressorHits=(article.stressors||[]).filter(stressor=>blob.includes(stressor.toLowerCase())).length;
+  const keywords=uniqueItems(blob.split(/[^a-z0-9]+/).filter(word=>word.length>4));
+  const articleText=[matter.title,matter.strap].join(' ').toLowerCase();
+  const keywordHits=keywords.filter(word=>articleText.includes(word)).length;
+  return (scenarioTopics.includes(article.topic)?5:0)+actorHits*2+stressorHits*2+Math.min(keywordHits,3);
+}
+function renderScenarioBriefingHtml(dossier){
+  if(!dossier.primaryArticle||!dossier.matter){
+    return `<p style="color:var(--muted);font-style:italic">Briefing document excerpt not available.</p>`;
+  }
+  return `
+    <div class="briefing-pack">
+      <p class="briefing-strap">${escH(dossier.matter.strap)}</p>
+      <div class="briefing-section">
+        <div class="briefing-section-label">Narrative Arc</div>
+        <div class="briefing-item">${escH(dossier.narrative)}</div>
+      </div>
+      ${dossier.excerptParagraphs.map(paragraph=>`<p>${escH(paragraph)}</p>`).join('')}
+      <div class="briefing-section">
+        <div class="briefing-section-label">Event Signals</div>
+        ${dossier.events.map(event=>`<div class="briefing-item"><strong>${escH(event.dateLabel)}</strong> ${escH(event.summary)}</div>`).join('')}
+      </div>
+      <div class="briefing-section">
+        <div class="briefing-section-label">Dependencies</div>
+        ${dossier.dependencies.map(item=>`<div class="briefing-item"><button class="briefing-link" onclick="openReader('${item.source.id}')">Phase ${item.phaseNum}: ${escH(item.source.title)}</button><span>${escH(item.dependencyText)}</span></div>`).join('')||'<div class="briefing-item">This phase opens the simulation, so there is no prior dependency chain yet.</div>'}
+      </div>
+      <div class="briefing-section">
+        <div class="briefing-section-label">Timeline Continuity</div>
+        ${dossier.timelineSignals.map(item=>`<div class="briefing-item"><strong>${escH(item.dateLabel)}</strong> ${escH(item.title)}: ${escH(item.signal)}</div>`).join('')||'<div class="briefing-item">No adjacent timeline signals found in this cluster.</div>'}
+      </div>
+      <div class="briefing-section">
+        <div class="briefing-section-label">Graph Links</div>
+        ${dossier.connected.map(item=>`<div class="briefing-item"><button class="briefing-link" onclick="openReader('${item.article.id}')">${escH(item.article.title)}</button><span>${escH(item.label)}. ${escH(shortenText(item.reasons.join(' '),140))}</span></div>`).join('')||'<div class="briefing-item">No strong semantic neighbors found for this source.</div>'}
+      </div>
+      <div class="briefing-rationale">${escH(dossier.rationale)}</div>
+    </div>`;
+}
+function buildSimulationOutcomeDossier(scenario,history,score,grade){
+  const sources=history
+    .map(item=>item.dossier?.primaryArticle)
+    .filter(Boolean)
+    .filter((article,idx,list)=>list.findIndex(other=>other.id===article.id)===idx);
+  const themes=uniqueItems(history.flatMap(item=>item.dossier?.primaryArticle?.stressors||[])).slice(0,4);
+  const actors=uniqueItems(history.flatMap(item=>item.dossier?.primaryArticle?.actors||[])).slice(0,5);
+  const strongestDecision=history.slice().sort((a,b)=>Math.abs(b.scoreDelta)-Math.abs(a.scoreDelta))[0]||null;
+  const connected=uniqueItems(history.flatMap(item=>item.dossier?.connected||[]).map(item=>item.article)).slice(0,3);
+  return {
+    title:scenario.outcome_title,
+    grade,
+    score,
+    summary:buildOutcomeSummary(scenario,history,score,grade,strongestDecision),
+    sourceTakeaways:sources.map(article=>{
+      const matter=getArticleMatter(article);
+      const events=getArticleEvents(article).slice(0,1);
+      return {article,strap:matter.strap,signal:events[0]?.summary||matter.paragraphs[0]||matter.strap};
+    }).slice(0,3),
+    decisionPath:history.map(item=>`${item.phaseTitle}: ${item.choiceLabel}`),
+    actors,
+    themes,
+    connected
+  };
+}
+function buildOutcomeSummary(scenario,history,score,grade,strongestDecision){
+  const direction=score>=0?'kept the simulation within the archive’s documented strategic logic':'leaned into the archive’s most contested readings';
+  const anchor=strongestDecision?`The decisive inflection came in "${strongestDecision.phaseTitle}", where the chosen line was "${strongestDecision.choiceLabel}".`:'No decision path recorded.';
+  return `${grade}: your path ${direction}. ${anchor} ${scenario.outcome_text}`;
+}
+function renderSimulationOutcomeHtml(dossier){
+  return `
+    <div class="outcome-pack">
+      <p>${escH(dossier.summary)}</p>
+      <div class="outcome-section">
+        <div class="outcome-section-label">Decision Path</div>
+        ${dossier.decisionPath.map(step=>`<div class="outcome-item">${escH(step)}</div>`).join('')}
+      </div>
+      <div class="outcome-section">
+        <div class="outcome-section-label">Source-backed Takeaways</div>
+        ${dossier.sourceTakeaways.map(item=>`<div class="outcome-item"><button class="briefing-link" onclick="openReader('${item.article.id}')">${escH(item.article.title)}</button><span>${escH(shortenText(item.signal,200))}</span></div>`).join('')}
+      </div>
+      <div class="outcome-section">
+        <div class="outcome-section-label">Dependencies and Themes</div>
+        <div class="outcome-item">${escH(`Actors: ${dossier.actors.join(', ')||'No actor set resolved'}. Themes: ${dossier.themes.join(', ')||'No thematic set resolved'}.`)}</div>
+        ${dossier.connected.map(article=>`<div class="outcome-item"><button class="briefing-link" onclick="openReader('${article.id}')">${escH(article.title)}</button><span>Semantic neighbor surfaced through the simulation path.</span></div>`).join('')}
+      </div>
+    </div>`;
+}
+function renderChoiceConsequenceHtml(choice,dossier){
+  const sourceLabel=dossier.primaryArticle?.title||dossier.title;
+  const signal=dossier.events[0]?.summary||dossier.matter?.strap||choice.outcome;
+  const dependency=dossier.dependencies[0]?.dependencyText||'This choice establishes the opening dependency for the simulation.';
+  return `
+    <p>${escH(choice.outcome)}</p>
+    <p><strong>Source anchor:</strong> ${escH(sourceLabel)}.</p>
+    <p><strong>Signal from the archive:</strong> ${escH(shortenText(signal,220))}</p>
+    <p><strong>Dependency note:</strong> ${escH(dependency)}</p>`;
+}
+function intersect(left,right){
+  const rightSet=new Set((right||[]).map(item=>String(item).toLowerCase()));
+  return (left||[]).filter(item=>rightSet.has(String(item).toLowerCase()));
+}
+function linkSemanticLabel(edge){
+  const source=getArticleById(edge.source);
+  const target=getArticleById(edge.target);
+  return `${source?.title||edge.source} ↔ ${target?.title||edge.target}`;
 }
 function getCrosswordPuzzle(){
   if(getCrosswordPuzzle.cache) return getCrosswordPuzzle.cache;
@@ -1115,9 +1452,9 @@ function buildQuizQuestions(){
     }
   ];
 }
-function getGraphDegrees(){
+function getGraphDegrees(graph=buildSemanticGraph()){
   const degrees=new Map(ARTICLES.map(a=>[a.id,0]));
-  EDGES.forEach(({source,target})=>{
+  graph.edges.forEach(({source,target})=>{
     degrees.set(source,(degrees.get(source)||0)+1);
     degrees.set(target,(degrees.get(target)||0)+1);
   });
