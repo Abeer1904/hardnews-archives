@@ -815,6 +815,29 @@ function initMap(){
   nodeG.append('circle').attr('r',d=>Math.max(Math.log1p(d.connections)*4+5,5)).attr('fill',d=>d.color+'cc').attr('stroke',d=>d.color).attr('stroke-width',d=>d.author==='Sanjay Kapoor'?2:.5);
   nodeG.filter(d=>d.connections>=8).append('text').attr('text-anchor','middle').attr('dy',d=>-(Math.max(Math.log1p(d.connections)*4+7,12))).attr('fill','#333').attr('font-size','7px').text(d=>d.title.substring(0,18));
 
+  function fitGraphToViewport(animated=true){
+    const validNodes=nodes.filter(n=>Number.isFinite(n.x)&&Number.isFinite(n.y));
+    if(!validNodes.length) return;
+    const minX=d3.min(validNodes,d=>d.x);
+    const maxX=d3.max(validNodes,d=>d.x);
+    const minY=d3.min(validNodes,d=>d.y);
+    const maxY=d3.max(validNodes,d=>d.y);
+    const graphW=Math.max(1,maxX-minX);
+    const graphH=Math.max(1,maxY-minY);
+    const pad=56;
+    const sx=(W-pad*2)/graphW;
+    const sy=(H-pad*2)/graphH;
+    const scale=Math.max(.35,Math.min(1.9,Math.min(sx,sy)));
+    const cx=(minX+maxX)/2;
+    const cy=(minY+maxY)/2;
+    const nextTransform=d3.zoomIdentity.translate(W/2,H/2).scale(scale).translate(-cx,-cy);
+    if(animated){
+      svg.transition().duration(420).call(zoomBehavior.transform,nextTransform);
+    }else{
+      svg.call(zoomBehavior.transform,nextTransform);
+    }
+  }
+
   function linkNodeId(endpoint){
     return typeof endpoint==='string'?endpoint:endpoint.id;
   }
@@ -865,12 +888,25 @@ function initMap(){
     nodeG.attr('transform',d=>`translate(${d.x},${d.y})`);
   });
 
+  let didInitialFit=false;
+  sim.on('end.autofit',()=>{
+    if(didInitialFit) return;
+    didInitialFit=true;
+    fitGraphToViewport(true);
+  });
+  setTimeout(()=>{
+    if(didInitialFit) return;
+    didInitialFit=true;
+    fitGraphToViewport(true);
+  },760);
+
   const resize=()=>{
     const dims=getDims();
     W=dims.W;H=dims.H;
     svg.attr('width',W).attr('height',H).attr('viewBox',`0 0 ${W} ${H}`).style('width',W+'px').style('height',H+'px');
     sim.force('center',d3.forceCenter(W/2,H/2));
     sim.alpha(.35).restart();
+    setTimeout(()=>fitGraphToViewport(false),180);
   };
 
   mapState={resize,sim};
