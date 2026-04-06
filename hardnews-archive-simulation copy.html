@@ -34,8 +34,7 @@
       <img src="HARDNEWS LOGO.png" alt="Hardnews" class="nav-logo-img">
     </div>
     <div class="nav-links">
-      <button class="nav-btn active" data-view="archive" onclick="showView('archive')">Archive</button>
-      <button class="nav-btn" data-view="book" onclick="showView('book')">Reading Room</button>
+      <button class="nav-btn active" data-view="book" onclick="showView('book')">Reading Room</button>
       <button class="nav-btn" data-view="timelines" onclick="showView('timelines')">Timelines</button>
       <button class="nav-btn" data-view="map" onclick="showView('map')">Knowledge Map</button>
       <button class="nav-btn" data-view="scenarios" onclick="showView('scenarios')">Simulations</button>
@@ -46,7 +45,7 @@
     </div>
   </nav>
   <div id="main-content">
-    <div class="view active" id="view-archive">
+    <div class="view" id="view-archive" style="display:none">
       <div class="filter-bar" id="filter-bar">
         <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
         <button class="filter-btn" onclick="setFilter('author:Sanjay Kapoor',this)" style="color:#c8a96e;border-color:rgba(200,169,110,.3)">Sanjay Kapoor</button>
@@ -55,7 +54,7 @@
       </div>
       <div class="article-grid" id="article-grid"></div>
     </div>
-    <div class="view" id="view-book">
+    <div class="view active" id="view-book">
       <div class="book-shell">
         <aside class="book-sidebar">
           <div class="book-sidebar-head">

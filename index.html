@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hardnews Archives — Our West Asia Reporting</title>
+<title>Hardnews Archive — West Asia Simulation</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="stylesheet" href="hardnews-archive-simulation-copy.css">
 </head>
@@ -34,17 +34,18 @@
       <img src="HARDNEWS LOGO.png" alt="Hardnews" class="nav-logo-img">
     </div>
     <div class="nav-links">
-      <button class="nav-btn active" data-view="archive" onclick="showView('archive')">Archive</button>
-      <button class="nav-btn" data-view="book" onclick="showView('book')">Reading Room</button>
+      <button class="nav-btn active" data-view="book" onclick="showView('book')">Reading Room</button>
+      <button class="nav-btn" data-view="timelines" onclick="showView('timelines')">Timelines</button>
       <button class="nav-btn" data-view="map" onclick="showView('map')">Knowledge Map</button>
       <button class="nav-btn" data-view="scenarios" onclick="showView('scenarios')">Simulations</button>
+      <button class="nav-btn" data-view="lab" onclick="showView('lab')">Archive Lab</button>
     </div>
     <div class="nav-search">
       <input type="text" id="search-input" placeholder="Search articles..." oninput="filterArticles()">
     </div>
   </nav>
   <div id="main-content">
-    <div class="view active" id="view-archive">
+    <div class="view" id="view-archive" style="display:none">
       <div class="filter-bar" id="filter-bar">
         <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
         <button class="filter-btn" onclick="setFilter('author:Sanjay Kapoor',this)" style="color:#c8a96e;border-color:rgba(200,169,110,.3)">Sanjay Kapoor</button>
@@ -53,7 +54,7 @@
       </div>
       <div class="article-grid" id="article-grid"></div>
     </div>
-    <div class="view" id="view-book">
+    <div class="view active" id="view-book">
       <div class="book-shell">
         <aside class="book-sidebar">
           <div class="book-sidebar-head">
@@ -67,6 +68,19 @@
           <div class="book-menu" id="book-menu"></div>
         </aside>
         <section class="book-reader" id="book-reader"></section>
+      </div>
+    </div>
+    <div class="view" id="view-timelines">
+      <div class="timeline-shell">
+        <aside class="timeline-sidebar">
+          <div class="timeline-sidebar-head">
+            <div class="timeline-label">Timeline Desk</div>
+            <h2 class="timeline-sidebar-title">Clustered Chronologies</h2>
+            <p class="timeline-sidebar-note">Each lane groups archive articles by topic cluster and turns them into a chronological briefing line.</p>
+          </div>
+          <div class="timeline-clusters" id="timeline-clusters"></div>
+        </aside>
+        <section class="timeline-stage" id="timeline-stage"></section>
       </div>
     </div>
     <div class="view" id="view-map">
@@ -87,6 +101,23 @@
         <p>Enter a scenario. Read the briefing on the right. Make your analysis on the left. See what actually happened.</p>
       </div>
       <div class="scenario-grid" id="scenario-grid"></div>
+    </div>
+    <div class="view" id="view-lab">
+      <div class="lab-shell">
+        <div class="lab-header">
+          <div>
+            <div class="lab-label">Archive Lab</div>
+            <h2 class="lab-title">Crossword and Quiz</h2>
+            <p class="lab-sub">Test recall, actors, conflicts, and archive vocabulary without leaving the reporting universe.</p>
+          </div>
+          <div class="lab-switches">
+            <button class="lab-switch active" data-lab-mode="crossword" onclick="setLabMode('crossword')">Crossword</button>
+            <button class="lab-switch" data-lab-mode="quiz" onclick="setLabMode('quiz')">Quiz</button>
+          </div>
+        </div>
+        <div class="lab-panel active" id="lab-crossword"></div>
+        <div class="lab-panel" id="lab-quiz"></div>
+      </div>
     </div>
   </div>
 </div>

@@ -48,6 +48,7 @@ function enterApp(){
     es.style.display='none';
     document.getElementById('app').classList.add('visible');
     buildTopicFilters();renderArchive();renderBookView();renderTimelineView();renderScenarios();renderLabView();
+    showView('book');
   },800);
 }
 
