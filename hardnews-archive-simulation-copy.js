@@ -721,8 +721,8 @@ function initMap(){
     }
   });
   const link=g.append('g').selectAll('line').data(links).enter().append('line')
-    .attr('stroke','#2a2d3a')
-    .attr('stroke-opacity',.5)
+    .attr('stroke','#b0a89a')
+    .attr('stroke-opacity',.7)
     .attr('stroke-width',d=>Math.min(d.weight*.28,2.6))
     .style('cursor','pointer')
     .style('pointer-events','stroke')
@@ -741,7 +741,7 @@ function initMap(){
     .on('mouseover',(e,d)=>{
       const tt=document.getElementById('map-tooltip');
       tt.style.display='block';tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';
-      tt.innerHTML=`<strong style="font-size:.78rem">${escH(linkSemanticLabel(d))}</strong><br><span style="color:#7b8099;font-size:.7rem">${escH(d.types.slice(0,3).join(' · '))}</span><br><span style="font-size:.68rem;color:#a8b0c5">${escH(shortenText(d.reasons.join(' • '),180))}</span>`;
+      tt.innerHTML=`<strong style="font-size:.78rem">${escH(linkSemanticLabel(d))}</strong><br><span style="color:#6b6560;font-size:.7rem">${escH(d.types.slice(0,3).join(' · '))}</span><br><span style="font-size:.68rem;color:#8a847f">${escH(shortenText(d.reasons.join(' • '),180))}</span>`;
     });
   const nodeG=g.append('g').selectAll('g').data(nodes).enter().append('g').style('cursor','pointer')
     .call(d3.drag()
@@ -760,7 +760,7 @@ function initMap(){
     .on('mouseover',(e,d)=>{
       const tt=document.getElementById('map-tooltip');
       tt.style.display='block';tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';
-      tt.innerHTML=`<strong style="font-size:.8rem">${escH(d.title)}</strong><br><span style="color:#7b8099;font-size:.7rem">${escH(d.author)} · ${escH(d.dateLabel)}</span><br><span style="color:${d.color};font-size:.65rem">${escH(d.topic)}</span><br><span style="font-size:.68rem;color:#a8b0c5">${escH(shortenText(d.signal,170))}</span>`;
+      tt.innerHTML=`<strong style="font-size:.8rem">${escH(d.title)}</strong><br><span style="color:#6b6560;font-size:.7rem">${escH(d.author)} · ${escH(d.dateLabel)}</span><br><span style="color:${d.color};font-size:.65rem">${escH(d.topic)}</span><br><span style="font-size:.68rem;color:#8a847f">${escH(shortenText(d.signal,170))}</span>`;
     })
     .on('mousemove',e=>{const tt=document.getElementById('map-tooltip');tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';})
     .on('mouseout',()=>{document.getElementById('map-tooltip').style.display='none';});
@@ -780,8 +780,8 @@ function initMap(){
         .attr('stroke-width',d=>d.author==='Sanjay Kapoor'?2:.5);
       nodeG.select('text').attr('opacity',1);
       link
-        .attr('stroke','#2a2d3a')
-        .attr('stroke-opacity',.5)
+        .attr('stroke','#b0a89a')
+        .attr('stroke-opacity',.7)
         .attr('stroke-width',d=>Math.min(d.weight*.28,2.6));
       return;
     }
@@ -789,8 +789,8 @@ function initMap(){
     const visible=new Set([nodeId,...(adjacency.get(nodeId)||[])]);
     nodeG.attr('opacity',d=>visible.has(d.id)?1:.28);
     nodeG.select('circle')
-      .attr('fill',d=>visible.has(d.id)?d.color+'cc':'#4a4f5faa')
-      .attr('stroke',d=>visible.has(d.id)?d.color:'#4a4f5f')
+      .attr('fill',d=>visible.has(d.id)?d.color+'cc':'#d5d0ca')
+      .attr('stroke',d=>visible.has(d.id)?d.color:'#b0a89a')
       .attr('stroke-width',d=>visible.has(d.id)?(d.author==='Sanjay Kapoor'?2:.8):.6);
     nodeG.select('text').attr('opacity',d=>visible.has(d.id)?1:.2);
 
@@ -798,7 +798,7 @@ function initMap(){
       .attr('stroke',d=>{
         const s=linkNodeId(d.source);
         const t=linkNodeId(d.target);
-        return s===nodeId||t===nodeId?'#c8a96e':'#2a2d3a';
+        return s===nodeId||t===nodeId?'#c8a96e':'#b0a89a';
       })
       .attr('stroke-opacity',d=>{
         const s=linkNodeId(d.source);
