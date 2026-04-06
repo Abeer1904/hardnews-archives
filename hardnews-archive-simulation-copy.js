@@ -21,7 +21,8 @@ const TOPIC_SCENARIO_MAP={
   "Miscellaneous":[],
 };
 
-let currentFilter='all',currentSearch='',currentScenario=null,currentPhaseIdx=0,simScore=0,mapInitialised=false,currentBriefingId=null,mapState=null;
+let currentFilter='all',currentSearch='',currentScenario=null,currentPhaseIdx=0,simScore=0,mapInitialised=false,currentBriefingId=null,mapState=null,currentBookArticleId=ARTICLES[0]?.id||null,knownAuthorsCache=null;
+const GEO_BYLINE_PREFIXES=new Set(['Afghanistan','Arabia','China','Delhi','Gulf','India','Iran','Iraq','Israel','Kabul','Pakistan','Palestine','Qatar','Russia','Saudi','Syria','Turkey','US','Yemen']);
 
 function enterApp(){
   const es=document.getElementById('entry-screen');
@@ -29,7 +30,7 @@ function enterApp(){
   setTimeout(()=>{
     es.style.display='none';
     document.getElementById('app').classList.add('visible');
-    buildTopicFilters();renderArchive();renderScenarios();
+    buildTopicFilters();renderArchive();renderBookView();renderScenarios();
   },800);
 }
 
@@ -39,9 +40,9 @@ function showView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  ['archive','map','scenarios'].forEach((n,i)=>{
-    if(n===name) document.querySelectorAll('.nav-btn')[i].classList.add('active');
-  });
+  const activeBtn=document.querySelector(`.nav-btn[data-view="${name}"]`);
+  if(activeBtn) activeBtn.classList.add('active');
+  if(name==='book') renderBookView();
   if(name==='map'&&!mapInitialised){
     requestAnimationFrame(()=>{
       initMap();
@@ -71,21 +72,30 @@ function setFilter(f,btn){
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
   renderArchive();
+  renderBookView();
 }
 
 function filterArticles(){
   currentSearch=document.getElementById('search-input').value.toLowerCase();
   renderArchive();
+  renderBookView();
+}
+
+function getFilteredArticles(){
+  return ARTICLES.filter(a=>{
+    const searchBlob=[a.title,a.summary,a.author,a.topic].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch=!currentSearch||searchBlob.includes(currentSearch);
+    const matchesFilter=currentFilter==='all'
+      ||(currentFilter.startsWith('author:')&&a.author===currentFilter.slice(7))
+      ||(currentFilter.startsWith('topic:')&&a.topic===currentFilter.slice(6));
+    return matchesSearch&&matchesFilter;
+  });
 }
 
 function renderArchive(){
   const grid=document.getElementById('article-grid');
   const stats=document.getElementById('archive-stats');
-  let filtered=ARTICLES.filter(a=>{
-    const ms=!currentSearch||a.title.toLowerCase().includes(currentSearch)||(a.summary||'').toLowerCase().includes(currentSearch)||(a.author||'').toLowerCase().includes(currentSearch);
-    const mf=currentFilter==='all'||(currentFilter.startsWith('author:')&&a.author===currentFilter.slice(7))||(currentFilter.startsWith('topic:')&&a.topic===currentFilter.slice(6));
-    return ms&&mf;
-  });
+  const filtered=getFilteredArticles();
   stats.textContent=filtered.length+' articles';
   grid.innerHTML=filtered.map(a=>{
     const c=TOPIC_COLORS[a.topic]||'#6b7280';
@@ -101,15 +111,90 @@ function renderArchive(){
   }).join('');
 }
 
+function renderBookView(){
+  const menu=document.getElementById('book-menu');
+  const count=document.getElementById('book-count');
+  const reader=document.getElementById('book-reader');
+  const filtered=getFilteredArticles();
+  count.textContent=`${filtered.length} article${filtered.length===1?'':'s'}`;
+
+  if(filtered.length===0){
+    currentBookArticleId=null;
+    menu.innerHTML='<div class="book-menu-empty">No articles match the current search or filter.</div>';
+    reader.innerHTML='<div class="book-article"><div class="book-kicker">Reading Room</div><div class="book-head"><div class="book-title">No article selected</div><p class="book-dek">Clear the search or switch the archive filter to restore the full reading list.</p></div></div>';
+    return;
+  }
+
+  if(!filtered.some(a=>a.id===currentBookArticleId)) currentBookArticleId=filtered[0].id;
+  const active=filtered.find(a=>a.id===currentBookArticleId)||filtered[0];
+  const matter=getArticleMatter(active);
+  const color=TOPIC_COLORS[active.topic]||'#6b7280';
+
+  menu.innerHTML=filtered.map(a=>{
+    const itemColor=TOPIC_COLORS[a.topic]||'#6b7280';
+    const itemMatter=getArticleMatter(a);
+    return `<button class="book-item ${a.id===active.id?'active':''}" style="--topic-color:${itemColor}" onclick="openBookArticle('${a.id}')">
+      <div class="book-item-topic" style="color:${itemColor}">${escH(a.topic)}</div>
+      <div class="book-item-title">${escH(itemMatter.title)}</div>
+      <div class="book-item-meta">${escH(itemMatter.displayAuthor)} · ${escH(shortStrap(itemMatter.strap))}</div>
+    </button>`;
+  }).join('');
+
+  reader.innerHTML=`<article class="book-article">
+    <div class="book-kicker">Reading Room</div>
+    <header class="book-head">
+      <div class="book-topic" style="color:${color};border-color:${color}">${escH(active.topic)}</div>
+      <h1 class="book-title">${escH(matter.title)}</h1>
+      <div class="book-byline">${escH(matter.displayAuthor)} · Hardnews Magazine</div>
+      <p class="book-dek">${escH(matter.strap)}</p>
+    </header>
+    <div class="book-rail">
+      <div class="book-stat">
+        <div class="book-stat-label">Actors</div>
+        <div class="book-stat-value">${escH((active.actors||[]).slice(0,4).join(', ')||'Not tagged')}</div>
+      </div>
+      <div class="book-stat">
+        <div class="book-stat-label">Stressors</div>
+        <div class="book-stat-value">${escH((active.stressors||[]).slice(0,3).join(', ')||'Not tagged')}</div>
+      </div>
+      <div class="book-stat">
+        <div class="book-stat-label">Source File</div>
+        <div class="book-stat-value">${escH(active.filename||'Archive')}</div>
+      </div>
+    </div>
+    <div class="book-prose">${matter.paragraphs.map(p=>`<p>${escH(p)}</p>`).join('')}</div>
+    <div class="book-footer">
+      <section class="book-note">
+        <h3>Central Dilemma</h3>
+        <p>${escH(active.dilemma||'No dilemma annotation available.')}</p>
+      </section>
+      <section class="book-note">
+        <h3>Key Questions</h3>
+        <ul>${uniqueItems(active.key_questions||[]).map(q=>`<li>${escH(q)}</li>`).join('')||'<li>No key questions annotated.</li>'}</ul>
+      </section>
+    </div>
+    <div class="book-reader-actions">
+      <button class="book-action" onclick="openReader('${active.id}')">Open Reader Notes</button>
+      <button class="book-action" onclick="showView('archive')">Back to Archive Grid</button>
+    </div>
+  </article>`;
+  reader.scrollTop=0;
+}
+
+function openBookArticle(id){
+  currentBookArticleId=id;
+  renderBookView();
+}
+
 function openReader(id){
   const a=ARTICLES.find(x=>x.id===id);if(!a)return;
+  const matter=getArticleMatter(a);
   const c=TOPIC_COLORS[a.topic]||'#6b7280';
   document.getElementById('reader-topic-badge').textContent=a.topic;
   document.getElementById('reader-topic-badge').style.cssText=`color:${c};border-color:${c}`;
-  document.getElementById('reader-title').textContent=a.title;
-  document.getElementById('reader-author').textContent=a.author+' · Hardnews Magazine';
-  const paras=(a.text||a.summary||'').split(/\n+/).filter(p=>p.trim().length>20);
-  document.getElementById('reader-text').innerHTML=paras.map(p=>`<p>${escH(p.trim())}</p>`).join('');
+  document.getElementById('reader-title').textContent=matter.title;
+  document.getElementById('reader-author').textContent=matter.displayAuthor+' · Hardnews Magazine';
+  document.getElementById('reader-text').innerHTML=matter.paragraphs.map(p=>`<p>${escH(p)}</p>`).join('');
   document.getElementById('meta-actors').innerHTML=(a.actors||[]).map(ac=>`<span class="meta-actor">${escH(ac)}</span>`).join('');
   document.getElementById('meta-stressors').innerHTML=(a.stressors||[]).map(s=>`<div class="meta-stressor">${escH(s)}</div>`).join('');
   document.getElementById('meta-dilemma').textContent=a.dilemma||'';
@@ -430,6 +515,127 @@ window.addEventListener('resize',()=>{if(mapState&&typeof mapState.resize==='fun
 
 function escH(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function uniqueItems(items){return[...new Set((items||[]).filter(Boolean))];}
+function shortStrap(strap){const text=strap||'';return text.length>90?text.slice(0,87).trim()+'...':text;}
+function normaliseArticleText(text){
+  return(text||'')
+    .replace(/<br\s*\/?>/gi,'\n\n')
+    .replace(/&nbsp;/gi,' ')
+    .replace(/&amp;/gi,'&')
+    .replace(/\u00a0/g,' ')
+    .replace(/[ \t]+\n/g,'\n')
+    .replace(/\n{3,}/g,'\n\n')
+    .replace(/[ \t]{2,}/g,' ')
+    .trim();
+}
+function getKnownAuthors(){
+  if(!knownAuthorsCache){
+    knownAuthorsCache=[...new Set(ARTICLES.map(a=>a.author).filter(a=>a&&a!=='Hardnews Staff'))].sort((a,b)=>b.length-a.length);
+  }
+  return knownAuthorsCache;
+}
+function authorLooksLike(candidate, reference){
+  if(!candidate||!reference)return false;
+  const a=candidate.toLowerCase().split(/\s+/).filter(Boolean);
+  const b=reference.toLowerCase().split(/\s+/).filter(Boolean);
+  return a[0]===b[0]&&a[a.length-1]===b[b.length-1];
+}
+function normalizeGenericByline(strap,candidateAuthor,referenceAuthor){
+  let nextStrap=strap.trim();
+  let nextAuthor=candidateAuthor.trim();
+  const tokens=nextAuthor.split(/\s+/).filter(Boolean);
+  if(tokens.length>=3&&GEO_BYLINE_PREFIXES.has(tokens[0])){
+    nextStrap=`${nextStrap} ${tokens.shift()}`.trim();
+    nextAuthor=tokens.join(' ');
+  }
+  if(referenceAuthor&&referenceAuthor!=='Hardnews Staff'&&authorLooksLike(nextAuthor,referenceAuthor)){
+    nextAuthor=referenceAuthor;
+  }
+  return {strap:nextStrap,author:nextAuthor};
+}
+function stripArchiveHeader(text){
+  let cleaned=normaliseArticleText(text).replace(/^Foreign Policy\s+/i,'').trim();
+  cleaned=cleaned.replace(/^[\s\S]*?Published:\s*[\s\S]*?\d{1,2}:\d{2}\s*/i,'').trim();
+  cleaned=cleaned.replace(/^Updated:\s*[\s\S]*?\d{1,2}:\d{2}\s*/i,'').trim();
+  return cleaned;
+}
+function extractEmbeddedByline(article,text){
+  const head=(text||'').slice(0,420);
+  const knownMatch=getKnownAuthors()
+    .map(name=>({name,index:head.indexOf(name)}))
+    .filter(match=>match.index>0)
+    .sort((a,b)=>a.index-b.index||b.name.length-a.name.length)[0];
+  if(knownMatch){
+    const strap=head.slice(0,knownMatch.index).trim();
+    const remainder=text.slice(knownMatch.index+knownMatch.name.length).trim();
+    const datelineMatch=remainder.match(/^([A-Z][A-Za-z.'-]+(?:\s[A-Z][A-Za-z.'-]+){0,2})(?=\s+[A-Z])/);
+    return {
+      strap,
+      author:knownMatch.name,
+      dateline:datelineMatch?datelineMatch[1]:'',
+      body:datelineMatch?remainder.slice(datelineMatch[0].length).trim():remainder
+    };
+  }
+
+  const generic=head.match(/^(.{40,260}?)\s+([A-Z][A-Za-z.'-]+(?:\s[A-Z](?:\.)?)?(?:\s[A-Z][A-Za-z.'-]+){1,2})\s+([A-Z][A-Za-z.'-]+(?:\s[A-Z][A-Za-z.'-]+){0,2})(?=\s+[A-Z])/);
+  if(!generic) return null;
+  const normalized=normalizeGenericByline(generic[1],generic[2],article.author);
+  return {
+    strap:normalized.strap,
+    author:normalized.author,
+    dateline:generic[3].trim(),
+    body:text.slice(generic[0].length).trim()
+  };
+}
+function getArticleMatter(article){
+  const cleaned=stripArchiveHeader(article.text||article.summary||'');
+  let author=article.author||'Hardnews Staff';
+  let dateline='';
+  let strap='';
+  let body=cleaned;
+  const embedded=extractEmbeddedByline(article,cleaned);
+
+  if(embedded){
+    strap=embedded.strap.replace(/\s+/g,' ');
+    author=embedded.author||author;
+    dateline=embedded.dateline||'';
+    body=embedded.body||body;
+  }
+
+  if(!strap){
+    const lines=cleaned.split(/\n+/).map(line=>line.trim()).filter(Boolean);
+    if(lines.length>1&&lines[0].length<=220){
+      strap=lines[0].replace(/\s+/g,' ');
+      body=lines.slice(1).join('\n\n').trim();
+    }
+  }
+
+  if(!strap){
+    const summary=stripArchiveHeader(article.summary||'');
+    if(summary){
+      strap=summary.split(/\n+/)[0].trim();
+    }
+  }
+
+  if(!strap){
+    const sentenceMatch=body.match(/(.{80,240}?[.!?])(?:\s|$)/);
+    strap=(sentenceMatch?sentenceMatch[1]:body.slice(0,180)).replace(/\s+/g,' ').trim();
+  }
+
+  let paragraphs=normaliseArticleText(body)
+    .split(/\n{2,}|\n+/)
+    .map(p=>p.trim())
+    .filter(p=>p.length>40);
+  if(paragraphs.length===0&&body.trim()) paragraphs=[body.trim()];
+  if(paragraphs.length===0&&strap) paragraphs=[strap];
+
+  return {
+    title:article.title,
+    author,
+    displayAuthor:dateline?`${author} · ${dateline}`:author,
+    strap,
+    paragraphs
+  };
+}
 function getGraphDegrees(){
   const degrees=new Map(ARTICLES.map(a=>[a.id,0]));
   EDGES.forEach(({source,target})=>{

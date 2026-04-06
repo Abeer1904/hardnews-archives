@@ -34,9 +34,10 @@
       <img src="HARDNEWS LOGO.png" alt="Hardnews" class="nav-logo-img">
     </div>
     <div class="nav-links">
-      <button class="nav-btn active" onclick="showView('archive')">Archive</button>
-      <button class="nav-btn" onclick="showView('map')">Knowledge Map</button>
-      <button class="nav-btn" onclick="showView('scenarios')">Simulations</button>
+      <button class="nav-btn active" data-view="archive" onclick="showView('archive')">Archive</button>
+      <button class="nav-btn" data-view="book" onclick="showView('book')">Reading Room</button>
+      <button class="nav-btn" data-view="map" onclick="showView('map')">Knowledge Map</button>
+      <button class="nav-btn" data-view="scenarios" onclick="showView('scenarios')">Simulations</button>
     </div>
     <div class="nav-search">
       <input type="text" id="search-input" placeholder="Search articles..." oninput="filterArticles()">
@@ -51,6 +52,22 @@
         <span class="archive-stats" id="archive-stats"></span>
       </div>
       <div class="article-grid" id="article-grid"></div>
+    </div>
+    <div class="view" id="view-book">
+      <div class="book-shell">
+        <aside class="book-sidebar">
+          <div class="book-sidebar-head">
+            <div>
+              <div class="book-label">Reading Room</div>
+              <h2 class="book-sidebar-title">Longform Archive</h2>
+            </div>
+            <div class="book-count" id="book-count"></div>
+          </div>
+          <div class="book-sidebar-note">Use the archive search and topic filters to narrow the list, then read any article in a continuous, book-style layout.</div>
+          <div class="book-menu" id="book-menu"></div>
+        </aside>
+        <section class="book-reader" id="book-reader"></section>
+      </div>
     </div>
     <div class="view" id="view-map">
       <div class="map-nav">
