@@ -63,13 +63,32 @@ function showView(name){
   if(name==='book') renderBookView();
   if(name==='timelines') renderTimelineView();
   if(name==='lab') renderLabView();
-  if(name==='map'&&!mapInitialised){
+  const mapSvg=document.getElementById('map-svg');
+  const mapLooksEmpty=!mapSvg||mapSvg.childElementCount===0;
+  if(name==='map'&&(!mapInitialised||mapLooksEmpty||!mapState)){
     requestAnimationFrame(()=>{
-      initMap();
-      mapInitialised=true;
+      const ok=safeInitMap();
+      mapInitialised=ok;
     });
   }else if(name==='map'&&mapState&&typeof mapState.resize==='function'){
     requestAnimationFrame(()=>mapState.resize());
+  }
+}
+
+function safeInitMap(){
+  try{
+    initMap();
+    return true;
+  }catch(error){
+    console.error('Knowledge map init failed:',error);
+    const legend=document.getElementById('map-legend');
+    const hint=document.querySelector('.map-instructions');
+    const tooltip=document.getElementById('map-tooltip');
+    if(legend) legend.innerHTML='<h4>Topics</h4><div class="legend-item"><span>Knowledge map failed to render. Click Map again to retry.</span></div>';
+    if(hint) hint.textContent='Map render error — click Map again to retry';
+    if(tooltip) tooltip.style.display='none';
+    mapState=null;
+    return false;
   }
 }
 
@@ -678,8 +697,16 @@ function initMap(){
   };
   const initial=getDims();
   let W=initial.W,H=initial.H;
-  const semanticGraph=getSemanticGraph();
-  const graphDegrees=getGraphDegrees(semanticGraph);
+  let semanticGraph;
+  let graphDegrees;
+  try{
+    semanticGraph=getSemanticGraph();
+    graphDegrees=getGraphDegrees(semanticGraph);
+  }catch(error){
+    console.error('Knowledge map graph build failed:',error);
+    semanticGraph={edges:[],adjacency:new Map()};
+    graphDegrees=new Map();
+  }
   const svg=d3.select('#map-svg');
   if(mapState&&mapState.sim) mapState.sim.stop();
   svg.selectAll('*').remove();
@@ -704,12 +731,19 @@ function initMap(){
       signal:events[0]?.summary||matter.strap
     };
   });
-  const links=semanticGraph.edges.map(e=>({...e}));
+  const links=(semanticGraph.edges||[]).map(e=>({...e}));
   const adjacency=new Map(nodes.map(n=>[n.id,new Set()]));
   links.forEach(l=>{
     adjacency.get(l.source).add(l.target);
     adjacency.get(l.target).add(l.source);
   });
+
+  if(!nodes.length){
+    legend.innerHTML='<h4>Topics</h4><div class="legend-item"><span>No articles available for the knowledge map.</span></div>';
+    if(hint) hint.textContent='No map data available';
+    mapState={resize:()=>{},sim:null};
+    return;
+  }
   let selectedNodeId=null;
   const sim=d3.forceSimulation(nodes)
     .force('link',d3.forceLink(links).id(d=>d.id).distance(90).strength(.25))
