@@ -667,9 +667,13 @@ function initMap(){
     if(app.classList.contains('map-mode')){
       return {W:window.innerWidth,H:window.innerHeight};
     }
+    const rect=container.getBoundingClientRect();
+    const fallbackH=Math.max(window.innerHeight-52,320);
+    const width=Math.round(rect.width)||container.clientWidth||window.innerWidth;
+    const height=Math.round(rect.height)||container.clientHeight||fallbackH;
     return {
-      W:container.clientWidth||window.innerWidth,
-      H:container.clientHeight||window.innerHeight
+      W:Math.max(width,320),
+      H:Math.max(height,320)
     };
   };
   const initial=getDims();
@@ -679,7 +683,7 @@ function initMap(){
   const svg=d3.select('#map-svg');
   if(mapState&&mapState.sim) mapState.sim.stop();
   svg.selectAll('*').remove();
-  svg.attr('width',W).attr('height',H).style('width',W+'px').style('height',H+'px');
+  svg.attr('width',W).attr('height',H).attr('viewBox',`0 0 ${W} ${H}`).style('width',W+'px').style('height',H+'px');
   const legend=document.getElementById('map-legend');
   legend.innerHTML='<h4>Topics</h4>'+Object.entries(TOPIC_COLORS).map(([t,c])=>
     `<div class="legend-item"><div class="legend-dot" style="background:${c}"></div><span>${t}</span></div>`
@@ -820,12 +824,14 @@ function initMap(){
   const resize=()=>{
     const dims=getDims();
     W=dims.W;H=dims.H;
-    svg.attr('width',W).attr('height',H).style('width',W+'px').style('height',H+'px');
+    svg.attr('width',W).attr('height',H).attr('viewBox',`0 0 ${W} ${H}`).style('width',W+'px').style('height',H+'px');
     sim.force('center',d3.forceCenter(W/2,H/2));
     sim.alpha(.35).restart();
   };
 
   mapState={resize,sim};
+  requestAnimationFrame(resize);
+  setTimeout(resize,120);
 }
 
 window.addEventListener('resize',()=>{if(mapState&&typeof mapState.resize==='function')mapState.resize();});
