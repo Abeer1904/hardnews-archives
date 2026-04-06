@@ -744,6 +744,8 @@ function initMap(){
     mapState={resize:()=>{},sim:null};
     return;
   }
+
+  legend.innerHTML+='<div class="legend-item" style="margin-top:.45rem"><span>Map diagnostics: '+nodes.length+' nodes · '+links.length+' links · '+W+'×'+H+'</span></div>';
   let selectedNodeId=null;
   const sim=d3.forceSimulation(nodes)
     .force('link',d3.forceLink(links).id(d=>d.id).distance(90).strength(.25))
@@ -751,7 +753,15 @@ function initMap(){
     .force('center',d3.forceCenter(W/2,H/2))
     .force('collision',d3.forceCollide(d=>Math.max(Math.log1p(d.connections)*5+10,12)));
   const g=svg.append('g');
-  svg.call(d3.zoom().scaleExtent([.2,5]).on('zoom',e=>g.attr('transform',e.transform)));
+  g.append('circle')
+    .attr('cx',W/2)
+    .attr('cy',H/2)
+    .attr('r',2.5)
+    .attr('fill','#b8883a')
+    .attr('opacity',.9);
+  const zoomBehavior=d3.zoom().scaleExtent([.2,5]).on('zoom',e=>g.attr('transform',e.transform));
+  svg.call(zoomBehavior);
+  svg.call(zoomBehavior.transform,d3.zoomIdentity);
   svg.on('click.focusReset',e=>{
     if(e.target===svg.node()){
       selectedNodeId=null;
