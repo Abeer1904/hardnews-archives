@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hardnews Archive — West Asia Simulation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link rel="stylesheet" href="hardnews-archive-simulation-copy.css">
+</head>
+<body>
+
+<!-- ENTRY -->
+<div id="entry-screen">
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+  <div class="entry-content">
+    <div class="entry-label">Hardnews Archives</div>
+    <h1 class="entry-title">Our <span>West Asia</span><br>Reporting</h1>
+    <p class="entry-sub">98 articles. Decades of reporting on Iran, Syria, Afghanistan, Saudi Arabia, and the geopolitics of oil and power. An interactive archive where history is not just read — it is interrogated.</p>
+    <div class="entry-stats">
+      <div class="entry-stat"><div class="num">98</div><div class="lbl">Articles</div></div>
+      <div class="entry-stat"><div class="num">13</div><div class="lbl">Topics</div></div>
+      <div class="entry-stat"><div class="num">7</div><div class="lbl">Simulations</div></div>
+      <div class="entry-stat"><div class="num">20+</div><div class="lbl">Years</div></div>
+    </div>
+    <button class="entry-btn" onclick="enterApp()">Enter the Archive</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav id="main-nav">
+    <div class="nav-logo" onclick="showView('archive')">
+      <img src="HARDNEWS LOGO.png" alt="Hardnews" class="nav-logo-img">
+    </div>
+    <div class="nav-links">
+      <button class="nav-btn active" onclick="showView('archive')">Archive</button>
+      <button class="nav-btn" onclick="showView('map')">Knowledge Map</button>
+      <button class="nav-btn" onclick="showView('scenarios')">Simulations</button>
+    </div>
+    <div class="nav-search">
+      <input type="text" id="search-input" placeholder="Search articles..." oninput="filterArticles()">
+    </div>
+  </nav>
+  <div id="main-content">
+    <div class="view active" id="view-archive">
+      <div class="filter-bar" id="filter-bar">
+        <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn" onclick="setFilter('author:Sanjay Kapoor',this)" style="color:#c8a96e;border-color:rgba(200,169,110,.3)">Sanjay Kapoor</button>
+        <div class="filter-sep"></div>
+        <span class="archive-stats" id="archive-stats"></span>
+      </div>
+      <div class="article-grid" id="article-grid"></div>
+    </div>
+    <div class="view" id="view-map">
+      <div class="map-nav">
+        <button class="vfn-link" onclick="showView('archive')">← Back to Archive</button>
+      </div>
+      <svg id="map-svg"></svg>
+      <div class="map-legend" id="map-legend"></div>
+      <div class="map-tooltip" id="map-tooltip"></div>
+      <div class="map-instructions">Click to focus links · Click a highlighted edge to read · Drag to explore · Scroll to zoom</div>
+    </div>
+    <div class="view" id="view-scenarios">
+      <div class="scenarios-header">
+        <div class="view-footer-nav">
+          <button class="vfn-link" onclick="showView('archive')">← Back to Archive</button>
+        </div>
+        <h2>Historical Simulations</h2>
+        <p>Enter a scenario. Read the briefing on the right. Make your analysis on the left. See what actually happened.</p>
+      </div>
+      <div class="scenario-grid" id="scenario-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- READER MODAL -->
+<div id="reader-modal">
+  <div class="reader-inner">
+    <div class="reader-header">
+      <button class="reader-back" onclick="closeReader()">← Back</button>
+      <div class="reader-header-text">
+        <div class="reader-topic-badge" id="reader-topic-badge"></div>
+        <div class="reader-title" id="reader-title"></div>
+        <div class="reader-author" id="reader-author"></div>
+      </div>
+      <button class="reader-close" onclick="closeReader()">✕</button>
+    </div>
+    <div class="reader-body">
+      <div class="reader-article" id="reader-text"></div>
+      <div class="reader-meta">
+        <div class="meta-section"><h4>Actors</h4><div class="meta-actors-list" id="meta-actors"></div></div>
+        <div class="meta-section"><h4>Stressors</h4><div id="meta-stressors"></div></div>
+        <div class="meta-section"><h4>Central Dilemma</h4><div class="meta-dilemma" id="meta-dilemma"></div></div>
+        <div class="meta-section"><h4>Key Questions</h4><div id="meta-questions"></div></div>
+        <div class="meta-section related-scenarios"><h4>Related Simulations</h4><div id="meta-related-sims"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SIM MODAL -->
+<div id="sim-modal">
+  <div class="sim-topbar">
+    <div class="sim-topbar-left">
+      <button class="sim-back" onclick="showView('scenarios');closeSim()">← Back</button>
+      <span class="sim-topbar-title" id="sim-topbar-title"></span>
+      <div class="sim-phase-pip" id="sim-phase-pip"></div>
+    </div>
+    <span class="sim-topbar-score" id="sim-topbar-score"></span>
+    <button class="sim-close" onclick="closeSim()">Exit</button>
+  </div>
+  <div id="sim-intro">
+    <div class="intro-glow" id="sim-intro-glow"></div>
+    <div class="intro-icon" id="sim-intro-icon"></div>
+    <div class="intro-period" id="sim-intro-period"></div>
+    <div class="intro-title" id="sim-intro-title"></div>
+    <div class="intro-tagline" id="sim-intro-tagline"></div>
+    <button class="intro-start" id="sim-start-btn" onclick="startSimPhases()">Enter Simulation →</button>
+  </div>
+  <div id="sim-phase-view">
+    <div class="sim-left">
+      <div class="phase-counter">
+        <span id="phase-label">Phase 1</span>
+        <div class="phase-progress"><div class="phase-progress-fill" id="phase-progress-fill" style="width:0%"></div></div>
+      </div>
+      <div class="phase-period" id="phase-period"></div>
+      <div class="phase-title" id="phase-title"></div>
+      <div class="phase-context" id="phase-context"></div>
+      <div class="decision-label">Your Analysis</div>
+      <div class="phase-question" id="phase-question"></div>
+      <div class="choices-list" id="choices-list"></div>
+      <div class="consequence-panel" id="consequence-panel">
+        <div class="consequence-header" id="consequence-header"></div>
+        <div class="consequence-body" id="consequence-body"></div>
+        <button class="consequence-next" id="consequence-next"></button>
+      </div>
+    </div>
+    <div class="sim-right">
+      <div class="sim-right-inner">
+        <div class="briefing-label">Intel Briefing — read this to inform your analysis</div>
+        <div class="briefing-title" id="briefing-title"></div>
+        <div class="briefing-text" id="briefing-text"></div>
+        <button class="briefing-open-btn" id="briefing-open-btn" onclick="openBriefingInReader()">Open full article →</button>
+      </div>
+    </div>
+  </div>
+  <div id="sim-outcome">
+    <div class="outcome-label">Outcome</div>
+    <div class="outcome-score-display" id="outcome-score-display"></div>
+    <div class="outcome-score-label" id="outcome-score-label"></div>
+    <div class="outcome-title" id="outcome-title"></div>
+    <div class="outcome-text" id="outcome-text"></div>
+    <div class="outcome-actions">
+      <button class="outcome-btn" onclick="showView('scenarios');closeSim()">All Simulations</button>
+      <button class="outcome-btn" onclick="restartSim()">Replay</button>
+    </div>
+  </div>
+</div>
+
+<script src="hardnews-archive-simulation-copy.js"></script>
+</body>
+</html>
